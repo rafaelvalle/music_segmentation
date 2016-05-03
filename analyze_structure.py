@@ -15,7 +15,6 @@ import pretty_midi
 import librosa
 from helpers import cropEdges, reduceDimensionality
 import matplotlib.pylab as plt
-import seaborn
 
 SR = 11025.0
 N_FFT = 4096
@@ -79,6 +78,7 @@ def extractChroma(filename, file_ext):
         chroma = librosa.feature.sync(chromagram,
                                       beat_times,
                                       aggregate=np.median).T
+
         # convert beat frame to seconds
         beat_times = librosa.frames_to_time(beat_times, sr=SR)
     else:
@@ -111,15 +111,54 @@ def extractCQT(filename, file_ext):
 
         tempo, beat_times = librosa.beat.beat_track(y=y_percussive,
                                                     sr=SR)
-        cqt = librosa.core.cqt(
+        cqt = np.abs(librosa.core.cqt(
             y=y, sr=SR, hop_length=HOP_LENGTH, resolution=1.0, fmin=27.5,
-            n_bins=BINS_PER_OCT*OCTAVES, bins_per_octave=BINS_PER_OCT)
+            n_bins=BINS_PER_OCT*OCTAVES,
+            bins_per_octave=BINS_PER_OCT, real=False))
         cqt = librosa.feature.sync(cqt, beat_times, aggregate=np.median).T
         beat_times = librosa.frames_to_time(beat_times, sr=SR)
     else:
         raise Exception('{} is not a supported filetype'.format(file_ext))
 
     return cqt, beat_times
+
+
+
+def extractAll(filename, file_ext):
+    if file_ext in ('.wav', '.mp3'):
+        # Load the example clip
+        y, _ = librosa.load(filename+file_ext, sr=SR, mono=True)
+        y_harmonic, y_percussive = librosa.effects.hpss(y)
+
+        tempo, beat_times = librosa.beat.beat_track(y=y_percussive,
+                                                    sr=SR)
+        # mfcc
+        mfcc = librosa.feature.mfcc(
+            y=y, sr=SR, n_mfcc=15, hop_length=HOP_LENGTH, fmin=27.5)
+        mfcc = librosa.feature.sync(mfcc,
+                                    beat_times,
+                                    aggregate=np.median).T
+        # cqt
+        cqt = np.abs(librosa.core.cqt(
+            y=y, sr=SR, hop_length=HOP_LENGTH, resolution=1.0, fmin=27.5,
+            n_bins=BINS_PER_OCT*OCTAVES, bins_per_octave=BINS_PER_OCT,
+            real=True))
+        cqt = librosa.feature.sync(cqt, beat_times, aggregate=np.median).T
+
+        # Compute chroma features from the harmonic signal
+        chromagram = librosa.feature.chroma_stft(y=y_harmonic, sr=SR,
+                                                 n_chroma=12, n_fft=N_FFT,
+                                                 hop_length=HOP_LENGTH)
+        # Aggregate chroma features between beat events
+        # We'll use the median value of each feature between beat frames
+        chromagram = librosa.feature.sync(chromagram,
+                                          beat_times,
+                                          aggregate=np.median).T
+        beat_time = librosa.frames_to_time(beat_times, sr=SR)
+    else:
+        raise Exception('{} is not a supported filetype'.format(file_ext))
+
+    return np.column_stack((cqt, mfcc, chroma)), beat_times
 
 
 def plotStructure(fullpath, ma_window=8, order=1, sr=4, cutoff=.1, n_singv=3,
@@ -131,7 +170,8 @@ def plotStructure(fullpath, ma_window=8, order=1, sr=4, cutoff=.1, n_singv=3,
     if feature == 'chroma':
         feat, beat_times = extractChroma(filename, file_ext)
         # normalize
-        feat /= feat.std(axis=0)
+        mean, std = feat.mean(axis=0), feat.std(axis=0)
+        feat = (feat - mean) / std
     elif feature == 'mfcc':
         feat, beat_times = extractMFCC(filename, file_ext)
         # normalize and remove amplitude column
@@ -141,6 +181,11 @@ def plotStructure(fullpath, ma_window=8, order=1, sr=4, cutoff=.1, n_singv=3,
     elif feature == 'cqt':
         feat, beat_times = extractCQT(filename, file_ext)
         # normalize and remove amplitude column
+        mean, std = feat.mean(axis=0), feat.std(axis=0)
+        feat = (feat - mean) / std
+    elif feature == 'all':
+        feat, beat_times = extractAll(filename, file_ext)
+        # normalize
         mean, std = feat.mean(axis=0), feat.std(axis=0)
         feat = (feat - mean) / std
     else:
