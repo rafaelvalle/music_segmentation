@@ -8,7 +8,7 @@ import argparse
 import functools
 import glob2 as glob
 import numpy as np
-from scipy.fftpack import rfft
+from scipy.fftpack import fft
 from scipy.signal import butter, lfilter
 from sklearn.decomposition import NMF
 import pretty_midi
@@ -169,38 +169,38 @@ def plotStructure(fullpath, ma_window=8, order=1, sr=4, cutoff=.1, n_singv=3,
         return np.sqrt(np.sum(np.power((a-b), 2)))
 
     def distanceFFTa(i):
-        return dist(np.power(rfft(feat[i:i+window_a].T), 2),
-                    np.power(rfft(feat[i+window_a:i+window_a*2].T), 2))
+        return dist(np.power(fft(feat[i:i+window_a].T), 2),
+                    np.power(fft(feat[i+window_a:i+window_a*2].T), 2))
 
     def distanceFFTb(i):
-        return dist(np.power(rfft(feat[i:i+window_b].T), 2),
-                    np.power(rfft(feat[i+window_b:i+window_b*2].T), 2))
+        return dist(np.power(fft(feat[i:i+window_b].T), 2),
+                    np.power(fft(feat[i+window_b:i+window_b*2].T), 2))
 
     def distanceFFTaLPF(i):
-        return dist(np.power(rfft(feat_lpf[i:i+window_a].T), 2),
-                    np.power(rfft(feat_lpf[i+window_a:i+window_a*2].T), 2))
+        return dist(np.power(fft(feat_lpf[i:i+window_a].T), 2),
+                    np.power(fft(feat_lpf[i+window_a:i+window_a*2].T), 2))
 
     def distanceFFTbLPF(i):
-        return dist(np.power(rfft(feat_lpf[i:i+window_b].T), 2),
-                    np.power(rfft(feat_lpf[i+window_b:i+window_b*2].T), 2))
+        return dist(np.power(fft(feat_lpf[i:i+window_b].T), 2),
+                    np.power(fft(feat_lpf[i+window_b:i+window_b*2].T), 2))
 
     def distanceFFTaRed(i):
-        return dist(np.power(rfft(feat_red[i:i+window_a].T), 2),
-                    np.power(rfft(feat_red[i+window_a:i+window_a*2].T), 2))
+        return dist(np.power(fft(feat_red[i:i+window_a].T), 2),
+                    np.power(fft(feat_red[i+window_a:i+window_a*2].T), 2))
 
     def distanceFFTbRed(i):
-        return dist(np.power(rfft(feat_red[i:i+window_b].T), 2),
-                    np.power(rfft(feat_red[i+window_b:i+window_b*2].T), 2))
+        return dist(np.power(fft(feat_red[i:i+window_b].T), 2),
+                    np.power(fft(feat_red[i+window_b:i+window_b*2].T), 2))
 
     def distanceFFTaLPFRed(i):
         return dist(
-            np.power(rfft(feat_red_lpf[i:i+window_a].T), 2),
-            np.power(rfft(feat_red_lpf[i+window_a:i+window_a*2].T), 2))
+            np.power(fft(feat_red_lpf[i:i+window_a].T), 2),
+            np.power(fft(feat_red_lpf[i+window_a:i+window_a*2].T), 2))
 
     def distanceFFTbLPFRed(i):
         return dist(
-            np.power(rfft(feat_red_lpf[i:i+window_b].T), 2),
-            np.power(rfft(feat_red_lpf[i+window_b:i+window_b*2].T), 2))
+            np.power(fft(feat_red_lpf[i:i+window_b].T), 2),
+            np.power(fft(feat_red_lpf[i+window_b:i+window_b*2].T), 2))
 
     def distanceRedLPFa(i):
         return dist(
