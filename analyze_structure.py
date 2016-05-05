@@ -16,8 +16,8 @@ import librosa
 from helpers import cropEdges, reduceDimensionality
 import matplotlib.pylab as plt
 
-SR = 11025.0
-N_FFT = 4096
+SR = 8192
+N_FFT = 2048
 HOP_LENGTH = 512
 BINS_PER_OCT = 12
 OCTAVES = 7
@@ -60,7 +60,6 @@ def extractChroma(filename, file_ext):
         # remove silence from beginning and end
         chroma = cropEdges(chroma)
     elif file_ext in ('.wav', '.mp3'):
-
         # Load the example clip
         y, _ = librosa.load(filename+file_ext, sr=SR, mono=True)
         # Separate harmonics and percussives into two waveforms
@@ -96,6 +95,8 @@ def extractMFCC(filename, file_ext):
         mfcc = librosa.feature.sync(mfcc,
                                     beat_times,
                                     aggregate=np.median).T
+        # normalize and remove amplitude column
+        mfcc = mfcc[:, 1:]
         beat_times = librosa.frames_to_time(beat_times, sr=SR)
     else:
         raise Exception('{} is not a supported filetype'.format(file_ext))
@@ -133,9 +134,9 @@ def extractAll(filename, file_ext):
         tempo, beat_times = librosa.beat.beat_track(y=y_percussive,
                                                     sr=SR)
         # mfcc
-        mfcc = librosa.feature.mfcc(
+        feat = librosa.feature.mfcc(
             y=y, sr=SR, n_mfcc=15, hop_length=HOP_LENGTH, fmin=27.5)
-        mfcc = librosa.feature.sync(mfcc,
+        feat = librosa.feature.sync(mfcc,
                                     beat_times,
                                     aggregate=np.median).T
         # cqt
@@ -144,6 +145,8 @@ def extractAll(filename, file_ext):
             n_bins=BINS_PER_OCT*OCTAVES, bins_per_octave=BINS_PER_OCT,
             real=True))
         cqt = librosa.feature.sync(cqt, beat_times, aggregate=np.median).T
+        feat = np.column_stack((feat, cqt))
+        del cqt
 
         # Compute chroma features from the harmonic signal
         chromagram = librosa.feature.chroma_stft(y=y_harmonic, sr=SR,
@@ -154,11 +157,14 @@ def extractAll(filename, file_ext):
         chromagram = librosa.feature.sync(chromagram,
                                           beat_times,
                                           aggregate=np.median).T
+
+        feat = np.column_stack((feat, chromagram))
+        del chromagram
         beat_time = librosa.frames_to_time(beat_times, sr=SR)
     else:
         raise Exception('{} is not a supported filetype'.format(file_ext))
 
-    return np.column_stack((cqt, mfcc, chroma)), beat_times
+    return feat, beat_times
 
 
 def plotStructure(fullpath, ma_window=8, order=1, sr=4, cutoff=.1, n_singv=3,
@@ -169,13 +175,11 @@ def plotStructure(fullpath, ma_window=8, order=1, sr=4, cutoff=.1, n_singv=3,
     print '\tExtracting Feature {}'.format(feature)
     if feature == 'chroma':
         feat, beat_times = extractChroma(filename, file_ext)
-        # normalize
+        # do not normalize because chroma is binary ?
         mean, std = feat.mean(axis=0), feat.std(axis=0)
         feat = (feat - mean) / std
     elif feature == 'mfcc':
         feat, beat_times = extractMFCC(filename, file_ext)
-        # normalize and remove amplitude column
-        feat = feat[:, 1:]
         mean, std = feat.mean(axis=0), feat.std(axis=0)
         feat = (feat - mean) / std
     elif feature == 'cqt':
@@ -190,13 +194,14 @@ def plotStructure(fullpath, ma_window=8, order=1, sr=4, cutoff=.1, n_singv=3,
         feat = (feat - mean) / std
     else:
         raise Exception('Feature {} is not supported'.format(feature))
+
     beat_times = beat_times.astype(int)
 
     # apply low-pass filter and running mean on featgram
     feat_lpf = butter_lowpass_filter(feat, cutoff, sr, order)
 
-    # perform dimensionality reduction (NMF)
-    if feature == 'chroma':
+    # perform dimensionality reduction (NMF or SVD)
+    if feature == '':
         print '\tNon-Negative Matrix Factorization'
         feat_red = NMF(n_singv).fit_transform(feat.astype(float))
         feat_lpf_red = NMF(n_singv).fit_transform(feat_lpf)
@@ -433,8 +438,8 @@ def plotStructure(fullpath, ma_window=8, order=1, sr=4, cutoff=.1, n_singv=3,
     ax.set_xticklabels(beat_times[::step_size], rotation=60)
 
     plt.tight_layout()
-    plt.savefig("{}_{}_asdiff_{}.png".format(
-        filename, feature, as_diff))
+    plt.savefig("{}_{}_{}_asdiff_{}.png".format(
+        filename, feature, cutoff, as_diff))
 
 
 def plotData(glob_str, ma_window, anal_window_a, anal_window_b,
