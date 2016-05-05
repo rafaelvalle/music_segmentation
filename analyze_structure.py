@@ -16,8 +16,8 @@ import librosa
 from helpers import cropEdges, reduceDimensionality
 import matplotlib.pylab as plt
 
-SR = 11025.0
-N_FFT = 4096
+SR = 8192
+N_FFT = 2048
 HOP_LENGTH = 512
 BINS_PER_OCT = 12
 OCTAVES = 7
@@ -123,7 +123,6 @@ def extractCQT(filename, file_ext):
     return cqt, beat_times
 
 
-
 def extractAll(filename, file_ext):
     if file_ext in ('.wav', '.mp3'):
         # Load the example clip
@@ -154,15 +153,16 @@ def extractAll(filename, file_ext):
         chromagram = librosa.feature.sync(chromagram,
                                           beat_times,
                                           aggregate=np.median).T
-        beat_time = librosa.frames_to_time(beat_times, sr=SR)
+        beat_times = librosa.frames_to_time(beat_times, sr=SR)
     else:
         raise Exception('{} is not a supported filetype'.format(file_ext))
 
-    return np.column_stack((cqt, mfcc, chroma)), beat_times
+    return np.column_stack((cqt, mfcc, chromagram)), beat_times
 
 
 def plotStructure(fullpath, ma_window=8, order=1, sr=4, cutoff=.1, n_singv=3,
-                  window_a=8, window_b=9, feature='chroma', as_diff=0):
+                  window_a=8, window_b=9, stepsize_a=2, stepsize_b=3,
+                  feature='chroma', as_diff=0):
     print 'Analyzing {}'.format(fullpath)
     # extract filename, filepath and beat aligned chroma
     filename, file_ext = os.path.splitext(fullpath)
@@ -196,7 +196,7 @@ def plotStructure(fullpath, ma_window=8, order=1, sr=4, cutoff=.1, n_singv=3,
     feat_lpf = butter_lowpass_filter(feat, cutoff, sr, order)
 
     # perform dimensionality reduction (NMF)
-    if feature == 'chroma':
+    if feature == '':
         print '\tNon-Negative Matrix Factorization'
         feat_red = NMF(n_singv).fit_transform(feat.astype(float))
         feat_lpf_red = NMF(n_singv).fit_transform(feat_lpf)
@@ -214,64 +214,70 @@ def plotStructure(fullpath, ma_window=8, order=1, sr=4, cutoff=.1, n_singv=3,
         return np.sqrt(np.sum(np.power((a-b), 2)))
 
     def distanceFFTa(i):
-        return dist(np.power(fft(feat[i:i+window_a].T), 2),
-                    np.power(fft(feat[i+window_a:i+window_a*2].T), 2))
+        return dist(
+        	np.power(fft(feat[i:i+window_a].T), 2),
+            np.power(fft(feat[i+stepsize_a:i+stepsize_a+window_a].T), 2))
 
     def distanceFFTb(i):
-        return dist(np.power(fft(feat[i:i+window_b].T), 2),
-                    np.power(fft(feat[i+window_b:i+window_b*2].T), 2))
+        return dist(
+        	np.power(fft(feat[i:i+window_b].T), 2),
+            np.power(fft(feat[i+stepsize_b:i+stepsize_b+window_b].T), 2))
 
     def distanceFFTaLPF(i):
-        return dist(np.power(fft(feat_lpf[i:i+window_a].T), 2),
-                    np.power(fft(feat_lpf[i+window_a:i+window_a*2].T), 2))
+        return dist(
+        	np.power(fft(feat_lpf[i:i+window_a].T), 2),
+            np.power(fft(feat_lpf[i+stepsize_a:i+stepsize_a+window_a].T), 2))
 
     def distanceFFTbLPF(i):
-        return dist(np.power(fft(feat_lpf[i:i+window_b].T), 2),
-                    np.power(fft(feat_lpf[i+window_b:i+window_b*2].T), 2))
+        return dist(
+        	np.power(fft(feat_lpf[i:i+window_b].T), 2),
+            np.power(fft(feat_lpf[i+stepsize_b:i+stepsize_b+window_b].T), 2))
 
     def distanceFFTaRed(i):
-        return dist(np.power(fft(feat_red[i:i+window_a].T), 2),
-                    np.power(fft(feat_red[i+window_a:i+window_a*2].T), 2))
+        return dist(
+        	np.power(fft(feat_red[i:i+window_a].T), 2),
+            np.power(fft(feat_red[i+stepsize_a:i+stepsize_a+window_a].T), 2))
 
     def distanceFFTbRed(i):
-        return dist(np.power(fft(feat_red[i:i+window_b].T), 2),
-                    np.power(fft(feat_red[i+window_b:i+window_b*2].T), 2))
+        return dist(
+        	np.power(fft(feat_red[i:i+window_b].T), 2),
+            np.power(fft(feat_red[i+stepsize_b:i+stepsize_b+window_b].T), 2))
 
     def distanceFFTaLPFRed(i):
         return dist(
             np.power(fft(feat_red_lpf[i:i+window_a].T), 2),
-            np.power(fft(feat_red_lpf[i+window_a:i+window_a*2].T), 2))
+            np.power(fft(feat_red_lpf[i+stepsize_a:i+stepsize_a+window_a].T), 2))
 
     def distanceFFTbLPFRed(i):
         return dist(
             np.power(fft(feat_red_lpf[i:i+window_b].T), 2),
-            np.power(fft(feat_red_lpf[i+window_b:i+window_b*2].T), 2))
+            np.power(fft(feat_red_lpf[i+stepsize_b:i+stepsize_b+window_b].T), 2))
 
     def distanceRedLPFa(i):
         return dist(
             np.power(feat_lpf_red[i:i+window_a].T, 2),
-            np.power(feat_lpf_red[i+window_a:i+window_a*2].T, 2))
+            np.power(feat_lpf_red[i+stepsize_a:i+stepsize_a+window_a].T, 2))
 
     def distanceRedLPFb(i):
         return dist(
             np.power(feat_lpf_red[i:i+window_b].T, 2),
-            np.power(feat_lpf_red[i+window_b:i+window_b*2].T, 2))
+            np.power(feat_lpf_red[i+stepsize_b:i+stepsize_b+window_b].T, 2))
 
     def distanceLPFa(i):
         return dist(feat_red_lpf[i:i+window_a],
-                    feat_red_lpf[i+window_a:i+window_a*2])
+                    feat_red_lpf[i+stepsize_a:i+stepsize_a+window_a])
 
     def distanceLPFb(i):
         return dist(feat_red_lpf[i:i+window_b],
-                    feat_red_lpf[i+window_b:i+window_b*2])
+                    feat_red_lpf[i+stepsize_b:i+stepsize_b+window_b])
 
     def distanceMAa(i):
         return dist(feat_ma[i:i+window_a],
-                    feat_ma[i+window_a:i+window_a*2])
+                    feat_ma[i+stepsize_a:i+stepsize_a+window_a])
 
     def distanceMAb(i):
         return dist(feat_ma[i:i+window_b],
-                    feat_ma[i+window_b:i+window_b*2])
+                    feat_ma[i+stepsize_b:i+stepsize_b+window_b])
 
     # iterate through data at 1 ts and compute distance between adjacent data
     dist_ffta = np.array(
@@ -438,11 +444,12 @@ def plotStructure(fullpath, ma_window=8, order=1, sr=4, cutoff=.1, n_singv=3,
 
 
 def plotData(glob_str, ma_window, anal_window_a, anal_window_b,
-             cutoff, order, sr, feature, as_diff):
+             cutoff, order, sr, stepsize_a, stepsize_b, feature, as_diff):
     tracks = [x for x in glob.glob(os.path.join(glob_str))]
     map(functools.partial(plotStructure,
         ma_window=ma_window, window_a=anal_window_a, window_b=anal_window_b,
-        cutoff=cutoff, order=order, sr=sr, feature=feature, as_diff=as_diff),
+        cutoff=cutoff, order=order, sr=sr, stepsize_a=stepsize_a,
+        stepsize_b=stepsize_b, feature=feature, as_diff=as_diff),
         tracks)
 
 
@@ -466,10 +473,15 @@ if __name__ == "__main__":
                         type=int, default=1, nargs='?')
     parser.add_argument("-s", "--sr", help='Low-Pass Filter Sampling Rate',
                         type=int, default=4, nargs='?')
+    parser.add_argument("-sa", "--sa", help='FFT Step-Size A',
+                        type=int, default=1, nargs='?')
+    parser.add_argument("-sb", "--sb", help='FFT Step-Size B',
+                        type=int, default=1, nargs='?')
 
     args = parser.parse_args()
 
     plotData(
         args.glob_str, args.ma_window, args.anal_window_a, args.anal_window_b,
-        args.cutoff, args.order, args.sr, args.feature, bool(args.as_diff))
+        args.cutoff, args.order, args.sr, args.sa, args.sb,
+        args.feature, bool(args.as_diff))
     exit(0)
