@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import deepdish as dd
 import librosa
@@ -168,43 +169,51 @@ def extractAll(filename, file_ext):
 
 def extractFeature(filename, file_ext, feature, scale, round_to, normalize,
                    beat_sync=True, transpose=True, save=False):
-    print '\tExtracting Feature {}'.format(feature)
-    if feature == 'chroma':
-        feat, beat_times = extractChroma(
-            filename, file_ext, beat_sync, transpose)
-    elif feature == 'mfcc':
-        feat, beat_times = extractMFCC(filename, file_ext, beat_sync, transpose)
-    elif feature == 'cqt':
-        feat, beat_times = extractCQT(filename, file_ext, beat_sync, transpose)
-    elif feature == 'ps':
-        feat, beat_times = extractPS(filename, file_ext, beat_sync, transpose)
-    elif feature == 'all':
-        feat, beat_times = extractAll(filename, file_ext, beat_sync, transpose)
+    # check if feature has been saved already
+    save_path = "{}_{}_beat_{}_scale_{}_round_{}_norm_{}.h5".format(
+    filename, feature, beat_sync, scale, round_to, normalize)
+    if os.path.isfile(save_path):
+        feat = dd.io.load(save_path)
+        beat_times = feat['beat_times']
+        feat = feat[feature]
     else:
-        raise Exception('Feature {} is not supported'.format(feature))
+        print '\tExtracting Feature {}'.format(feature)
+        if feature == 'chroma':
+            feat, beat_times = extractChroma(
+                filename, file_ext, beat_sync, transpose)
+        elif feature == 'mfcc':
+            feat, beat_times = extractMFCC(filename, file_ext, beat_sync, transpose)
+        elif feature == 'cqt':
+            feat, beat_times = extractCQT(filename, file_ext, beat_sync, transpose)
+        elif feature == 'ps':
+            feat, beat_times = extractPS(filename, file_ext, beat_sync, transpose)
+        elif feature == 'all':
+            feat, beat_times = extractAll(filename, file_ext, beat_sync, transpose)
+        else:
+            raise Exception('Feature {} is not supported'.format(feature))
 
-    # pre-processing
-    if scale:
-        print "\tScaling Data to max == 1"
-        feat /= np.max(np.abs(feat), axis=1, keepdims=True)
+        # pre-processing
+        if scale:
+            print "\tScaling Data to max == 1"
+            feat /= np.max(np.abs(feat), axis=1, keepdims=True)
 
-    if round_to:
-        # print "\tRounding to {} decimal places".format(round_to)
-        # feat = np.around(feat, round_to)
-        print "\tRounding to {} step".format(round_to)
-        feat = np.round(feat / round_to) * round_to
+        if round_to:
+            # print "\tRounding to {} decimal places".format(round_to)
+            # feat = np.around(feat, round_to)
+            print "\tRounding to {} step".format(round_to)
+            feat = np.round(feat / round_to) * round_to
 
-    if normalize:
-        print "\tNormalizing data"
-        mean, std = feat.mean(axis=0), feat.std(axis=0)
-        feat = (feat - mean) / std
-    feat = np.nan_to_num(feat)
+        if normalize:
+            print "\tNormalizing data"
+            mean, std = feat.mean(axis=0), feat.std(axis=0)
+            feat = (feat - mean) / std
+        feat = np.nan_to_num(feat)
 
-    if save:
-        dd.io.save(
-            "{}_{}_beat_{}_scale_{}_round_{}_norm_{}.h5".format(
-                filename, feature, beat_sync, scale, round_to, normalize),
-            {feature: feat, 'beat_times': beat_times}
-            )
+        if save:
+            dd.io.save(
+                "{}_{}_beat_{}_scale_{}_round_{}_norm_{}.h5".format(
+                    filename, feature, beat_sync, scale, round_to, normalize),
+                {feature: feat, 'beat_times': beat_times}
+                )
 
     return feat, beat_times
