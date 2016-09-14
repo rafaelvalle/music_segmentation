@@ -4,10 +4,9 @@ from re import escape
 from fractions import Fraction
 from collections import defaultdict
 import numpy as np
-from scipy.sparse.linalg import svds
-from sklearn.metrics.pairwise import manhattan_distances as manhat_dist
+# from sklearn.metrics.pairwise import manhattan_distances as manhat_dist
 from sklearn.metrics.pairwise import euclidean_distances as euclid_dist
-from sklearn.metrics.pairwise import chi2_kernel as chi2_dist
+# from sklearn.metrics.pairwise import chi2_kernel as chi2_dist
 
 
 ##############
@@ -126,7 +125,6 @@ def buildHistogram(seq, escape_chars=''):
         user, and values are key counts.
     """
 
-
     def incrementDict(a_dict, key):
         a_dict[key] += 1
 
@@ -218,23 +216,14 @@ def getPhraseStarts(vals, window=4):
     return results
 
 
-def reduceDimensionality(data, n_singv=0, threshold=0.9, inc_proj=True):
-    if n_singv > 0:
-        lsv, sv, rsv = svds(data, n_singv, which='LM')
-    else:
-        lsv, sv, rsv = svds(data, data.shape[1] - 1, which='LM')
-        # find number of singular values that explain 90% of variance
-        n_singv = 1
-        while np.sum(sv[-n_singv:]) / np.sum(sv) < threshold:
-            n_singv += 1
+def completeBeatTimes(beat_times):
+    diff = beat_times[1] - beat_times[0]
+    extra_beats = [0]
 
-    # compute reduced data and data projected onto principal components space
-    data_redu = np.dot(data, rsv.T)
-    if inc_proj:
-        data_proj = np.dot(lsv[:, -n_singv:],
-                           np.dot(np.diag(sv[-n_singv:]), rsv[-n_singv:, ]))
-        return data_redu, data_proj
-    return data_redu
+    while (extra_beats[-1] + diff) < beat_times[0]:
+        extra_beats.append(extra_beats[-1] + diff)
+    beat_times = np.hstack((extra_beats, beat_times))
+    return beat_times
 
 
 ##########
