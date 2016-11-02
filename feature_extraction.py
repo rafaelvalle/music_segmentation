@@ -1,21 +1,38 @@
 import os
+import pdb
 import numpy as np
 import deepdish as dd
 import librosa
+from madmom.features.beats import RNNBeatProcessor, DBNBeatTrackingProcessor
 import pretty_midi
 from helpers import completeBeatTimes
 from params import SR, N_FFT, HOP_LENGTH, BINS_PER_OCT, OCTAVES
 
 
-def beatSyncFeature(feature, y_percussive, sr, hop_length):
+def beatSyncFeature(feature, audio, sr, hop_length):
+    # Aggregate feature between beat events
+    fps = SR/HOP_LENGTH
+    beat_proc = DBNBeatTrackingProcessor(fps=100)
+    beat_act = RNNBeatProcessor()(audio)
+    beat_times = beat_proc(beat_act)
+    # We'll use the median value of each feature between beat frames
+    feature = librosa.feature.sync(feature,
+                                   (beat_times*fps).astype(int),
+                                   aggregate=np.median)
+    return feature, beat_times
+
+"""
+def beatSyncFeature(feature, y_percussive, sr, hop_length, step_size=4):
     # Beat track on the percussive signal
     tempo, beat_times = librosa.beat.beat_track(y=y_percussive,
                                                 sr=SR,
                                                 hop_length=HOP_LENGTH)
+
+    beat_times = beat_times[::step_size]
     # apply heuristics to have all beats
     beat_times = completeBeatTimes(beat_times)
 
-    # Aggregate featre between beat events
+    # Aggregate feature between beat events
     # We'll use the median value of each feature between beat frames
     feature = librosa.feature.sync(feature,
                                    beat_times,
@@ -23,7 +40,7 @@ def beatSyncFeature(feature, y_percussive, sr, hop_length):
     # convert beat frame to seconds
     beat_times = librosa.frames_to_time(beat_times, sr=SR)
     return feature, beat_times
-
+"""
 
 def extractChroma(filename, file_ext, beat_sync, transpose=True):
     if file_ext == ".mid":
@@ -92,9 +109,13 @@ def extractCQT(filename, file_ext, beat_sync, transpose=True):
 
         beat_times = None
         if beat_sync:
+            """
             y_harmonic, y_percussive = librosa.effects.hpss(y)
-            cqt, beat_times = beatSyncFeature(cqt, y_percussive,
-                                              SR, HOP_LENGTH)
+            cqt, beat_times = beatSyncFeature(
+                cqt, y_percussive, R, HOP_LENGTH)
+            """
+            cqt, beat_times = beatSyncFeature(
+                cqt, filename+file_ext, SR, HOP_LENGTH)
         # transpose such that rows are features
         if transpose:
             cqt = cqt.T
