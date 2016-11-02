@@ -16,7 +16,8 @@ import seaborn
 from statistics import svd, computeBic, findElbow, lpf
 from feature_extraction import extractFeature
 import matplotlib.pylab as plt
-
+from matplotlib.colors import hsv_to_rgb
+import pdb
 
 def set_trace():
     from IPython.core.debugger import Pdb
@@ -37,7 +38,7 @@ def plotClustering(fullpath, order=1, sr=4, cutoff=.1, n_singv=3,
                    feature='chroma', dim_red='SVD', round_to=0, normalize=1,
                    scale=1, length=4, clustering='KMEANS'):
     feat = {}
-    print ('Analyzing {} with feature {},  order {}, sr {}, cutoff {}, '
+    print ('Analyzing {} with feature {}, order {}, sr {}, cutoff {}, '
            'n_singv {}, scale {} normalize {}, round_to {}'.format(
                fullpath, feature, order, sr, cutoff, n_singv, scale, normalize,
                round_to))
@@ -46,17 +47,19 @@ def plotClustering(fullpath, order=1, sr=4, cutoff=.1, n_singv=3,
 
     # extract filter and apply pre-processing
     feat[feature], beat_times = extractFeature(
-        filename, file_ext, feature, scale, round_to, normalize, save=True)
+        filename, file_ext, feature, scale, round_to, normalize,
+        beat_sync=True, save=True)
 
-    # set dimensionality reduction technique
     feat['LPF'] = lpf(feat[feature], cutoff, sr, order)
     feat[dim_red] = dim_red_fn(dim_red, feat[feature], n_singv)
     feat['{}(LPF)'.format(dim_red)] = dim_red_fn(
         dim_red, feat['LPF'], n_singv)
     feat['LPF({})'.format(dim_red)] = lpf(feat[dim_red], cutoff, sr, order)
     feat['{}-LPF'.format(feature)] = feat[feature] - feat['LPF']
-    feat['{}({}-LPF)'.format(dim_red, feature)] = dim_red_fn(
-        dim_red, feat['{}-LPF'.format(feature)], n_singv)
+    feat['LPF({}-LPF)'.format(feature)] = lpf(
+        feat['{}-LPF'.format(feature)], cutoff, sr, order)
+    feat['{}(LPF({}-LPF))'.format(dim_red, feature)] = dim_red_fn(dim_red,
+        feat['LPF({}-LPF)'.format(feature)], n_singv)
 
     # create vars for plotting
     ts = np.arange(0, len(feat[feature]))
@@ -65,12 +68,15 @@ def plotClustering(fullpath, order=1, sr=4, cutoff=.1, n_singv=3,
     fig.suptitle('feature {} order {}, cutoff {}, sr {}'.format(
         feature, order, cutoff, sr))
 
-    gs = mpl.gridspec.GridSpec(14, 4, width_ratios=[1, 1, 1, 1])
+    gs = mpl.gridspec.GridSpec(12, 4, width_ratios=[1, 1, 1, 1])
     i = 0
     print "\tPlot data and pre-processing"
-    for name in (feature, 'LPF', '{}-LPF'.format(feature), dim_red,
-                 '{}(LPF)'.format(dim_red), 'LPF({})'.format(dim_red),
-                 '{}({}-LPF)'.format(dim_red, feature)):
+    for name in (feature,
+                 '{}-LPF'.format(feature),
+                 '{}(LPF)'.format(dim_red),
+                 'LPF({})'.format(dim_red),
+                 'LPF({}-LPF)'.format(feature),
+                 '{}(LPF({}-LPF))'.format(dim_red, feature)):
         data = feat[name]
 
         data_wide = np.array([feat[name][m:m+length, :]
@@ -122,7 +128,6 @@ def plotClustering(fullpath, order=1, sr=4, cutoff=.1, n_singv=3,
             k_best = dpgmm.means_.shape[0]
             centroids = dpgmm.means_
             centroid_idx = np.argmax(dpgmm.predict_proba(data_wide), axis=1)
-
         # plot data
         if data.shape[1] == 3:
             data = data.reshape(1, data.shape[0], data.shape[1])
@@ -136,12 +141,17 @@ def plotClustering(fullpath, order=1, sr=4, cutoff=.1, n_singv=3,
                   origin='low',
                   aspect='auto',
                   cmap=plt.cm.Oranges)
+        xlabels = ["{}:{}".format(int(x / 60), int(x % 60))
+                   for x in beat_times[::step_size]]
         ax.set_xticks(ts[::step_size])
-        ax.set_xticklabels(beat_times[::step_size], rotation=60)
+        ax.set_xticklabels(xlabels, rotation=60)
         ax.grid(False)
 
         # plot clustering on raw feature
         changes = np.hstack(([True], centroid_idx[:-1] != centroid_idx[1:]))
+        for c in xrange(changes.shape[0]-1):
+            if changes[c] and changes[c+1]:
+                changes[c] = False
         ax_twin = ax.twiny()
         ax_twin.set_xlim(ax.get_xlim())
         ax_twin.set_xticks(np.argwhere(changes)[:, 0])
@@ -230,7 +240,7 @@ def plotClustering(fullpath, order=1, sr=4, cutoff=.1, n_singv=3,
         filename, feature, cutoff, round_to, normalize, scale, length, dim_red))
     # save with smaller size
     fig.set_figwidth(36)
-    fig.set_figheight(18)
+    fig.set_figheight(24)
     plt.tight_layout()
     plt.savefig("{}_clustering_{}_{}_r_{}_n_{}_s_{}_l_{}_{}_small.png".format(
         filename, feature, cutoff, round_to, normalize, scale, length, dim_red))
