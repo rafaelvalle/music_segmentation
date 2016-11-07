@@ -1,5 +1,4 @@
 import os
-import pdb
 import numpy as np
 import deepdish as dd
 import librosa
@@ -7,6 +6,7 @@ from madmom.features.beats import RNNBeatProcessor, DBNBeatTrackingProcessor
 import pretty_midi
 from helpers import completeBeatTimes
 from params import SR, N_FFT, HOP_LENGTH, BINS_PER_OCT, OCTAVES
+import pdb
 
 
 def beatSyncFeature(feature, audio, sr, hop_length):
@@ -21,26 +21,6 @@ def beatSyncFeature(feature, audio, sr, hop_length):
                                    aggregate=np.median)
     return feature, beat_times
 
-"""
-def beatSyncFeature(feature, y_percussive, sr, hop_length, step_size=4):
-    # Beat track on the percussive signal
-    tempo, beat_times = librosa.beat.beat_track(y=y_percussive,
-                                                sr=SR,
-                                                hop_length=HOP_LENGTH)
-
-    beat_times = beat_times[::step_size]
-    # apply heuristics to have all beats
-    beat_times = completeBeatTimes(beat_times)
-
-    # Aggregate feature between beat events
-    # We'll use the median value of each feature between beat frames
-    feature = librosa.feature.sync(feature,
-                                   beat_times,
-                                   aggregate=np.median)
-    # convert beat frame to seconds
-    beat_times = librosa.frames_to_time(beat_times, sr=SR)
-    return feature, beat_times
-"""
 
 def extractChroma(filename, file_ext, beat_sync, transpose=True):
     if file_ext == ".mid":
@@ -64,8 +44,8 @@ def extractChroma(filename, file_ext, beat_sync, transpose=True):
                                              hop_length=HOP_LENGTH)
         beat_times = None
         if beat_sync:
-            chroma, beat_times = beatSyncFeature(chroma, y_percussive,
-                                                 SR, HOP_LENGTH)
+            chroma, beat_times = beatSyncFeature(
+                chroma, filename+file_ext, SR, HOP_LENGTH)
         # transpose such that rows are features
         if transpose:
             chroma = chroma.T
@@ -83,10 +63,8 @@ def extractMFCC(filename, file_ext, beat_sync, transpose=True):
 
         beat_times = None
         if beat_sync:
-            y_harmonic, y_percussive = librosa.effects.hpss(y)
             mfcc, beat_times = beatSyncFeature(
-                mfcc, y_percussive, SR, HOP_LENGTH
-                )
+                mfcc, filename+file_ext, SR, HOP_LENGTH)
 
         # transpose such that rows are features
         if transpose:
@@ -109,11 +87,6 @@ def extractCQT(filename, file_ext, beat_sync, transpose=True):
 
         beat_times = None
         if beat_sync:
-            """
-            y_harmonic, y_percussive = librosa.effects.hpss(y)
-            cqt, beat_times = beatSyncFeature(
-                cqt, y_percussive, R, HOP_LENGTH)
-            """
             cqt, beat_times = beatSyncFeature(
                 cqt, filename+file_ext, SR, HOP_LENGTH)
         # transpose such that rows are features
@@ -130,13 +103,12 @@ def extractPS(filename, file_ext, beat_sync, transpose=True):
         # Load the example clip
         y, _ = librosa.load(filename+file_ext, sr=SR, mono=True)
 
-        y_harmonic, y_percussive = librosa.effects.hpss(y)
         ps = np.abs(librosa.stft(y, n_fft=N_FFT, hop_length=HOP_LENGTH))**2
 
         beat_times = None
         if beat_sync:
-            ps, beat_times = beatSyncFeature(ps, y_percussive,
-                                             SR, HOP_LENGTH)
+            ps, beat_times = beatSyncFeature(
+                ps, filename+file_ext, SR, HOP_LENGTH)
         # transpose such that rows are features
         if transpose:
             ps = ps.T
@@ -189,10 +161,10 @@ def extractAll(filename, file_ext):
 
 
 def extractFeature(filename, file_ext, feature, scale, round_to, normalize,
-                   beat_sync=True, transpose=True, save=False):
+                   beat_sync=True, transpose=False, save=True):
     # check if feature has been saved already
     save_path = "{}_{}_beat_{}_scale_{}_round_{}_norm_{}.h5".format(
-    filename, feature, beat_sync, scale, round_to, normalize)
+        filename, feature, beat_sync, scale, round_to, normalize)
     if os.path.isfile(save_path):
         feat = dd.io.load(save_path)
         beat_times = feat['beat_times']
@@ -203,31 +175,32 @@ def extractFeature(filename, file_ext, feature, scale, round_to, normalize,
             feat, beat_times = extractChroma(
                 filename, file_ext, beat_sync, transpose)
         elif feature == 'mfcc':
-            feat, beat_times = extractMFCC(filename, file_ext, beat_sync, transpose)
+            feat, beat_times = extractMFCC(
+                filename, file_ext, beat_sync, transpose)
         elif feature == 'cqt':
-            feat, beat_times = extractCQT(filename, file_ext, beat_sync, transpose)
+            feat, beat_times = extractCQT(
+                filename, file_ext, beat_sync, transpose)
         elif feature == 'ps':
-            feat, beat_times = extractPS(filename, file_ext, beat_sync, transpose)
+            feat, beat_times = extractPS(
+                filename, file_ext, beat_sync, transpose)
         elif feature == 'all':
-            feat, beat_times = extractAll(filename, file_ext, beat_sync, transpose)
+            feat, beat_times = extractAll(
+                filename, file_ext, beat_sync, transpose)
         else:
             raise Exception('Feature {} is not supported'.format(feature))
-
         # pre-processing
         if scale:
             print "\tScaling Data to max == 1"
-            feat /= np.max(np.abs(feat), axis=1, keepdims=True)
-
+            feat /= np.max(np.abs(feat), axis=0, keepdims=True)
         if round_to:
-            # print "\tRounding to {} decimal places".format(round_to)
-            # feat = np.around(feat, round_to)
             print "\tRounding to {} step".format(round_to)
             feat = np.round(feat / round_to) * round_to
-
         if normalize:
             print "\tNormalizing data"
-            mean, std = feat.mean(axis=0), feat.std(axis=0)
+            mean, std = feat.mean(axis=1), feat.std(axis=1)
             feat = (feat - mean) / std
+
+        print "\tRemoving NaNs"
         feat = np.nan_to_num(feat)
 
         if save:
